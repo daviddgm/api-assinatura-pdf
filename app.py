@@ -100,7 +100,7 @@ def assinar_pdf():
                 SigFieldSpec(
                     sig_field_name=nome_campo,
                     on_page=ultima_pagina,
-                    box=box
+                    box=box,
                     field_flags=None
                 )
             )
