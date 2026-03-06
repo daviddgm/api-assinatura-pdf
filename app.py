@@ -106,19 +106,20 @@ def assinar_pdf():
             texto = f"✓ ASSINADO DIGITALMENTE\nPor: {nome_assinante}\n{cargo}\nData: %(ts)s"
             stamp_style = TextStampStyle(stamp_text=texto)
 
+            # Prepara o motor de assinatura acoplando o estilo visual e a chave
+            pdf_signer = PdfSigner(
+                signature_meta=signers.PdfSignatureMetadata(
+                    field_name=nome_campo, 
+                    md_algorithm='sha256'
+                ),
+                signer=signer,
+                stamp_style=stamp_style
+            )
+            
             with open(out_path, 'wb') as out_file:
-                # Voltamos para a função Wrapper oficial que funcionou perfeitamente antes!
-                # Ela aceita o estilo do carimbo e gerencia os arquivos sozinha.
-                signers.sign_pdf(
-                    writer, 
-                    signers.PdfSignatureMetadata(
-                        field_name=nome_campo,
-                        md_algorithm='sha256'
-                    ),
-                    signer=signer, 
-                    stamp_style=stamp_style, # Passamos o visual do carimbo aqui
-                    output=out_file
-                )
+                # A mágica da versão 0.21.0: passamos APENAS o writer e o output!
+                # Ele já sabe qual é o in_file internamente.
+                pdf_signer.sign_pdf(writer, output=out_file)
 
         return send_file(out_path, as_attachment=True, download_name='assinado.pdf', mimetype='application/pdf')
 
