@@ -88,7 +88,6 @@ def assinar_pdf():
             writer = IncrementalPdfFileWriter(doc)
             nome_campo = 'Assinatura_OSE_' + id_unico
             
-            # --- A CORREÇÃO ESTÁ AQUI ---
             # Lê a quantidade de páginas direto da árvore de propriedades (Root) do PDF
             total_paginas = int(writer.prev.root['/Pages']['/Count'])
             ultima_pagina = total_paginas - 1
@@ -103,20 +102,23 @@ def assinar_pdf():
                 )
             )
 
-            # Desenha o texto do carimbo dentro do quadrado
+            # Desenha o texto do carimbo
             texto = f"✓ ASSINADO DIGITALMENTE\nPor: {nome_assinante}\n{cargo}\nData: %(ts)s"
             stamp_style = TextStampStyle(stamp_text=texto)
 
-            # Prepara o motor de assinatura acoplando o estilo visual
-            pdf_signer = PdfSigner(
-                signature_meta=signers.PdfSignatureMetadata(field_name=nome_campo, md_algorithm='sha256'),
-                signer=signer,
-                stamp_style=stamp_style
-            )
-            
             with open(out_path, 'wb') as out_file:
-                # Faz a magia: Assina criptograficamente e desenha o carimbo ao mesmo tempo!
-                pdf_signer.sign_pdf(writer, in_file=doc, out_file=out_file)
+                # Voltamos para a função Wrapper oficial que funcionou perfeitamente antes!
+                # Ela aceita o estilo do carimbo e gerencia os arquivos sozinha.
+                signers.sign_pdf(
+                    writer, 
+                    signers.PdfSignatureMetadata(
+                        field_name=nome_campo,
+                        md_algorithm='sha256'
+                    ),
+                    signer=signer, 
+                    stamp_style=stamp_style, # Passamos o visual do carimbo aqui
+                    output=out_file
+                )
 
         return send_file(out_path, as_attachment=True, download_name='assinado.pdf', mimetype='application/pdf')
 
