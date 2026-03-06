@@ -32,7 +32,7 @@ def assinar_pdf():
         pdf_file.save(pdf_path)
         
         # 3. Carrega o certificado da memória
-        signer = signers.SimpleSigner.load_pkcs12(pfx_data=p12_data, password=senha)
+        signer = signers.SimpleSigner.load_pkcs12(p12_data, senha)
 
         # 4. Aplica a assinatura incremental
         with open(pdf_path, 'rb') as doc:
