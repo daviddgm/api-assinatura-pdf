@@ -3,6 +3,8 @@ import tempfile
 import uuid
 import traceback
 from flask import Flask, request, send_file
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.serialization import pkcs12
 from pyhanko.sign import signers
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 
@@ -18,30 +20,62 @@ def assinar_pdf():
         p12_file = request.files['p12']
         senha = request.form['senha'].encode('utf-8')
 
+        # 1. Desmonta o P12 usando a biblioteca raiz de criptografia (100% à prova de falhas)
+        p12_data = p12_file.read()
+        try:
+            private_key, certificate, additional_certificates = pkcs12.load_key_and_certificates(
+                p12_data, 
+                senha
+            )
+        except ValueError as e:
+            if "MAC" in str(e) or "password" in str(e).lower():
+                return "Erro: Senha do certificado incorreta.", 400
+            raise e
+            
+        # 2. Validação definitiva
+        if private_key is None:
+            return "Erro: O seu arquivo .p12 não contém chave privada (apenas leitura).", 400
+
+        # 3. Caminhos temporários
         temp_dir = tempfile.gettempdir()
         id_unico = str(uuid.uuid4())[:8]
         pdf_path = os.path.join(temp_dir, f'entrada_{id_unico}.pdf')
-        p12_path = os.path.join(temp_dir, f'cert_{id_unico}.p12')
         out_path = os.path.join(temp_dir, f'saida_{id_unico}.pdf')
-
-        # Salva os arquivos corretamente no disco para o pyHanko ler nativamente
+        key_path = os.path.join(temp_dir, f'key_{id_unico}.pem')
+        cert_path = os.path.join(temp_dir, f'cert_{id_unico}.pem')
+        
+        pdf_file.seek(0)
         pdf_file.save(pdf_path)
-        p12_file.save(p12_path)
 
-        # 1. Carrega o certificado usando o método oficial do pyHanko
-        signer = signers.SimpleSigner.load_pkcs12(p12_path, senha)
+        # 4. O HACK: Salva a chave e o cert extraídos em formato puro (PEM)
+        with open(key_path, 'wb') as f:
+            f.write(private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption()
+            ))
+            
+        with open(cert_path, 'wb') as f:
+            f.write(certificate.public_bytes(serialization.Encoding.PEM))
 
-        # 2. Aplica a assinatura
+        # 5. Carrega o pyHanko a partir dos PEMs puros (Bypass no bug da biblioteca)
+        signer = signers.SimpleSigner.load(
+            key_file=key_path,
+            cert_file=cert_path,
+            key_passphrase=None
+        )
+
+        # 6. Aplica a assinatura
         with open(pdf_path, 'rb') as doc:
             writer = IncrementalPdfFileWriter(doc)
             nome_campo = 'Assinatura_OSE_' + id_unico
-
+            
             with open(out_path, 'wb') as out_file:
                 signers.sign_pdf(
                     writer, 
                     signers.PdfSignatureMetadata(
                         field_name=nome_campo,
-                        md_algorithm='sha256' # <-- A verdadeira solução para o erro NoneType!
+                        md_algorithm='sha256'
                     ),
                     signer=signer, 
                     output=out_file
@@ -51,15 +85,11 @@ def assinar_pdf():
 
     except Exception as e:
         erro_completo = traceback.format_exc()
-        if "mac verify failure" in str(e).lower():
-            return "Erro: A senha do certificado está incorreta.", 400
-            
         return f"Erro Crítico do Servidor:\n{str(e)}\n\nTraceback Completo:\n{erro_completo}", 500
         
     finally:
+        # 7. Limpeza rigorosa para segurança
         if 'pdf_path' in locals() and os.path.exists(pdf_path): os.remove(pdf_path)
-        if 'p12_path' in locals() and os.path.exists(p12_path): os.remove(p12_path)
         if 'out_path' in locals() and os.path.exists(out_path): os.remove(out_path)
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+        if 'key_path' in locals() and os.path.exists(key_path): os.remove(key_path)
+        if 'cert_path' in locals() and os.path.exists(cert_path): os.remove(cert_path)
