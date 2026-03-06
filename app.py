@@ -88,8 +88,10 @@ def assinar_pdf():
             writer = IncrementalPdfFileWriter(doc)
             nome_campo = 'Assinatura_OSE_' + id_unico
             
-            # Descobre qual é a última página (0-indexed)
-            ultima_pagina = len(writer.document.pages) - 1
+            # --- A CORREÇÃO ESTÁ AQUI ---
+            # Lê a quantidade de páginas direto da árvore de propriedades (Root) do PDF
+            total_paginas = int(writer.prev.root['/Pages']['/Count'])
+            ultima_pagina = total_paginas - 1
 
             # Cria o "quadrado" no ficheiro PDF (invisível até ser carimbado)
             append_signature_field(
