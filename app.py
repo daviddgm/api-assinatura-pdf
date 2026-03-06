@@ -77,11 +77,11 @@ def assinar_pdf():
         # Largura da folha A4 é aprox 595 pontos. A Altura (Y) começa em 0 na base.
         # Vamos posicionar o carimbo a 50 pontos da base do ficheiro.
         if posicao == '1':   # Esquerda
-            box = (40, 50, 190, 100)
+            box = (40, 250, 190, 100)
         elif posicao == '2': # Centro
-            box = (222, 50, 372, 100)
+            box = (222, 250, 372, 100)
         else:                # Direita (3)
-            box = (405, 50, 555, 100)
+            box = (405, 250, 555, 100)
 
         # 5. Aplica a assinatura e o carimbo
         with open(pdf_path, 'rb') as doc:
@@ -103,7 +103,7 @@ def assinar_pdf():
             )
 
             # Desenha o texto do carimbo
-            texto = f"✓ ASSINADO DIGITALMENTE\nPor: {nome_assinante}\n{cargo}\nData: %(ts)s"
+            texto = f"ASSINADO DIGITALMENTE\nPor: {nome_assinante}\n{cargo}\nData: %(ts)s"
             stamp_style = TextStampStyle(stamp_text=texto)
 
             # Prepara o motor de assinatura acoplando o estilo visual e a chave
