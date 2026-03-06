@@ -14,25 +14,24 @@ def assinar_pdf():
         return "Erro: Faltam parâmetros (pdf, p12 ou senha)", 400
 
     pdf_file = request.files['pdf']
-    # Lemos o .p12 direto para a memória. Muito mais rápido e seguro contra corrupção.
-    p12_data = request.files['p12'].read() 
+    p12_file = request.files['p12']
     senha = request.form['senha'].encode('utf-8')
 
-    if len(p12_data) == 0:
-        return "Erro: O arquivo .p12 chegou vazio na API.", 400
-
-    # 2. Preparamos caminhos seguros para o PDF (usando o diretório temp do Linux)
+    # 2. Caminhos seguros para salvar os arquivos no diretório temporário
     temp_dir = tempfile.gettempdir()
     id_unico = str(uuid.uuid4())[:8]
+    
     pdf_path = os.path.join(temp_dir, f'entrada_{id_unico}.pdf')
+    p12_path = os.path.join(temp_dir, f'cert_{id_unico}.p12')
     out_path = os.path.join(temp_dir, f'saida_{id_unico}.pdf')
     
     try:
-        # Salva o PDF original no disco
+        # Salva o PDF e o Certificado no disco da API
         pdf_file.save(pdf_path)
+        p12_file.save(p12_path)
         
-        # 3. Carrega o certificado da memória
-        signer = signers.SimpleSigner.load_pkcs12(p12_data, senha)
+        # 3. Passa o CAMINHO do arquivo (e não a memória) para o pyHanko
+        signer = signers.SimpleSigner.load_pkcs12(p12_path, senha)
 
         # 4. Aplica a assinatura incremental
         with open(pdf_path, 'rb') as doc:
@@ -47,18 +46,21 @@ def assinar_pdf():
                     output=out_file
                 )
 
-        # 5. Devolve o arquivo e já avisa o navegador que é um PDF
+        # 5. Devolve o arquivo
         return send_file(out_path, as_attachment=True, download_name='assinado.pdf', mimetype='application/pdf')
 
     except Exception as e:
         erro_msg = str(e)
-        # 6. Intercepta o erro da chave privada e traduz para português
+        # 6. Traduções de erros comuns
         if "get_signature_mechanism_for_digest" in erro_msg or "NoneType" in erro_msg:
-            return "Erro: O seu certificado .p12 é inválido para assinatura. Ele não possui a 'Chave Privada' embutida. Exporte ele novamente do Windows marcando 'Sim, exportar a chave privada'.", 400
-        
+            return "Erro: O seu certificado .p12 não possui a 'Chave Privada' embutida.", 400
+        if "mac verify failure" in erro_msg.lower():
+            return "Erro: A senha do certificado está incorreta.", 400
+            
         return f"Erro interno ao assinar: {erro_msg}", 500
         
     finally:
-        # 7. Limpeza (Sempre limpa o servidor do Render para não lotar o disco)
+        # 7. Limpeza rigorosa dos 3 arquivos para não encher o disco do Render
         if os.path.exists(pdf_path): os.remove(pdf_path)
+        if os.path.exists(p12_path): os.remove(p12_path)
         if os.path.exists(out_path): os.remove(out_path)
