@@ -75,16 +75,15 @@ def assinar_pdf():
         # --- LÓGICA DO CARIMBO VISUAL ---
         # Define as coordenadas (Box) na folha A4.
         # Largura da folha A4 é aprox 595 pontos. A Altura (Y) começa em 0 na base.
-        # Vamos posicionar o carimbo a 50 pontos da base do ficheiro.
         # 1 = Esquerda (Resp. Contratada)
         if posicao == '1':   
-            box = (60, 360, 220, 440)
+            box = (60, 320, 220, 380)
         # 2 = Centro (Gestor do Contrato)
         elif posicao == '2': 
-            box = (220, 360, 380, 440)
+            box = (220, 320, 380, 380)
         # 3 = Direita (Fiscal do Contrato)
         else:                
-            box = (380, 360, 540, 440)
+            box = (380, 320, 540, 380)
 
         # 5. Aplica a assinatura e o carimbo
         with open(pdf_path, 'rb') as doc:
@@ -108,6 +107,7 @@ def assinar_pdf():
             # Desenha o texto do carimbo
             texto = f"ASSINADO DIGITALMENTE\nPor: {nome_assinante}\n{cargo}\nData: %(ts)s"
             stamp_style = TextStampStyle(stamp_text=texto)
+            border_width=0
 
             # Prepara o motor de assinatura acoplando o estilo visual e a chave
             pdf_signer = PdfSigner(
