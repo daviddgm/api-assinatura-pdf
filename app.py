@@ -7,6 +7,9 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 from pyhanko.sign import signers
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.stamp import TextStampStyle
+from pyhanko.sign.fields import SigFieldSpec, append_signature_field
+from pyhanko.sign.signers import PdfSigner
 
 app = Flask(__name__)
 
@@ -19,8 +22,13 @@ def assinar_pdf():
         pdf_file = request.files['pdf']
         p12_file = request.files['p12']
         senha = request.form['senha'].encode('utf-8')
+        
+        # --- NOVOS PARÂMETROS RECEBIDOS DO PHP PARA O CARIMBO VISUAL ---
+        nome_assinante = request.form.get('nome_assinante', 'Responsável')
+        cargo = request.form.get('cargo', '')
+        posicao = request.form.get('posicao', '1') # 1=Esquerda, 2=Centro, 3=Direita
 
-        # 1. Desmonta o P12 usando a biblioteca raiz de criptografia (100% à prova de falhas)
+        # 1. Desmonta o P12 (Bypass de Segurança)
         p12_data = p12_file.read()
         try:
             private_key, certificate, additional_certificates = pkcs12.load_key_and_certificates(
@@ -32,11 +40,10 @@ def assinar_pdf():
                 return "Erro: Senha do certificado incorreta.", 400
             raise e
             
-        # 2. Validação definitiva
         if private_key is None:
-            return "Erro: O seu arquivo .p12 não contém chave privada (apenas leitura).", 400
+            return "Erro: O seu ficheiro .p12 não contém chave privada.", 400
 
-        # 3. Caminhos temporários
+        # 2. Caminhos temporários
         temp_dir = tempfile.gettempdir()
         id_unico = str(uuid.uuid4())[:8]
         pdf_path = os.path.join(temp_dir, f'entrada_{id_unico}.pdf')
@@ -47,7 +54,7 @@ def assinar_pdf():
         pdf_file.seek(0)
         pdf_file.save(pdf_path)
 
-        # 4. O HACK: Salva a chave e o cert extraídos em formato puro (PEM)
+        # 3. Salva as chaves puras
         with open(key_path, 'wb') as f:
             f.write(private_key.private_bytes(
                 encoding=serialization.Encoding.PEM,
@@ -58,28 +65,56 @@ def assinar_pdf():
         with open(cert_path, 'wb') as f:
             f.write(certificate.public_bytes(serialization.Encoding.PEM))
 
-        # 5. Carrega o pyHanko a partir dos PEMs puros (Bypass no bug da biblioteca)
+        # 4. Carrega o signer
         signer = signers.SimpleSigner.load(
             key_file=key_path,
             cert_file=cert_path,
             key_passphrase=None
         )
 
-        # 6. Aplica a assinatura
+        # --- LÓGICA DO CARIMBO VISUAL ---
+        # Define as coordenadas (Box) na folha A4.
+        # Largura da folha A4 é aprox 595 pontos. A Altura (Y) começa em 0 na base.
+        # Vamos posicionar o carimbo a 50 pontos da base do ficheiro.
+        if posicao == '1':   # Esquerda
+            box = (40, 50, 190, 100)
+        elif posicao == '2': # Centro
+            box = (222, 50, 372, 100)
+        else:                # Direita (3)
+            box = (405, 50, 555, 100)
+
+        # 5. Aplica a assinatura e o carimbo
         with open(pdf_path, 'rb') as doc:
             writer = IncrementalPdfFileWriter(doc)
             nome_campo = 'Assinatura_OSE_' + id_unico
             
-            with open(out_path, 'wb') as out_file:
-                signers.sign_pdf(
-                    writer, 
-                    signers.PdfSignatureMetadata(
-                        field_name=nome_campo,
-                        md_algorithm='sha256'
-                    ),
-                    signer=signer, 
-                    output=out_file
+            # Descobre qual é a última página (0-indexed)
+            ultima_pagina = len(writer.document.pages) - 1
+
+            # Cria o "quadrado" no ficheiro PDF (invisível até ser carimbado)
+            append_signature_field(
+                writer,
+                SigFieldSpec(
+                    sig_field_name=nome_campo,
+                    on_page=ultima_pagina,
+                    box=box
                 )
+            )
+
+            # Desenha o texto do carimbo dentro do quadrado
+            texto = f"✓ ASSINADO DIGITALMENTE\nPor: {nome_assinante}\n{cargo}\nData: %(ts)s"
+            stamp_style = TextStampStyle(stamp_text=texto)
+
+            # Prepara o motor de assinatura acoplando o estilo visual
+            pdf_signer = PdfSigner(
+                signature_meta=signers.PdfSignatureMetadata(field_name=nome_campo, md_algorithm='sha256'),
+                signer=signer,
+                stamp_style=stamp_style
+            )
+            
+            with open(out_path, 'wb') as out_file:
+                # Faz a magia: Assina criptograficamente e desenha o carimbo ao mesmo tempo!
+                pdf_signer.sign_pdf(writer, in_file=doc, out_file=out_file)
 
         return send_file(out_path, as_attachment=True, download_name='assinado.pdf', mimetype='application/pdf')
 
@@ -88,7 +123,6 @@ def assinar_pdf():
         return f"Erro Crítico do Servidor:\n{str(e)}\n\nTraceback Completo:\n{erro_completo}", 500
         
     finally:
-        # 7. Limpeza rigorosa para segurança
         if 'pdf_path' in locals() and os.path.exists(pdf_path): os.remove(pdf_path)
         if 'out_path' in locals() and os.path.exists(out_path): os.remove(out_path)
         if 'key_path' in locals() and os.path.exists(key_path): os.remove(key_path)
