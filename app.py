@@ -35,7 +35,7 @@ def assinar_pdf():
                         writer, 
                         signers.PdfSignatureMetadata(field_name=nome_campo),
                         signer=signer, 
-                        out=out_file
+                        output=out_file
                     )
 
             return send_file(tmp_out.name, as_attachment=True, download_name='assinado.pdf', mimetype='application/pdf')
