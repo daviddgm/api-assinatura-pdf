@@ -76,12 +76,15 @@ def assinar_pdf():
         # Define as coordenadas (Box) na folha A4.
         # Largura da folha A4 é aprox 595 pontos. A Altura (Y) começa em 0 na base.
         # Vamos posicionar o carimbo a 50 pontos da base do ficheiro.
-        if posicao == '1':   # Esquerda
-            box = (40, 250, 190, 100)
-        elif posicao == '2': # Centro
-            box = (222, 250, 372, 100)
-        else:                # Direita (3)
-            box = (405, 250, 555, 100)
+        # 1 = Esquerda (Resp. Contratada)
+        if posicao == '1':   
+            box = (60, 360, 220, 440)
+        # 2 = Centro (Gestor do Contrato)
+        elif posicao == '2': 
+            box = (220, 360, 380, 440)
+        # 3 = Direita (Fiscal do Contrato)
+        else:                
+            box = (380, 360, 540, 440)
 
         # 5. Aplica a assinatura e o carimbo
         with open(pdf_path, 'rb') as doc:
