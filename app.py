@@ -106,8 +106,7 @@ def assinar_pdf():
 
             # Desenha o texto do carimbo
             texto = f"ASSINADO DIGITALMENTE\nPor: {nome_assinante}\n{cargo}\nData: %(ts)s"
-            stamp_style = TextStampStyle(stamp_text=texto)
-            border_width=0
+            stamp_style = TextStampStyle(stamp_text=texto,border_width=0,background=None)
 
             # Prepara o motor de assinatura acoplando o estilo visual e a chave
             pdf_signer = PdfSigner(
